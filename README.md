@@ -1,185 +1,246 @@
-## Defense & Gov Signal Feed
+# Defense & Gov Signal Feed
 
-Full‑stack Next.js app that turns defense tech news and US government funding data into a Twitter‑style feed, curated around what the user is looking for.
+Full‑stack Next.js app that turns defense tech news and US government funding data into a Twitter‑style feed, curated around user interests and search queries.
 
-### Stack
+## Architecture Overview
 
-- **Frontend**: Next.js (App Router, TypeScript), Tailwind CSS
-- **Backend**: Next.js Route Handlers (`/api/feed`)
-- **Database**: Supabase (Postgres) via `@supabase/supabase-js`
-- **Data sources**:
-  - Defense News RSS (defense tech & policy)
-  - DoD Press Releases RSS
-  - Grants.gov API (federal grant opportunities via public API)
-  - SAM.gov API (federal contract opportunities - requires API key)
+```mermaid
+graph TB
+    subgraph Frontend["🎨 Frontend Layer"]
+        HomePage["Home Page<br/>For You | Latest Tabs"]
+        SearchPage["Search Page<br/>Query + Filters"]
+        AccountPage["Account Page<br/>Preferences"]
+    end
 
-### How it works
+    subgraph Components["🧩 Components"]
+        FeedList["FeedList<br/>Display items"]
+        FeedCard["FeedCard<br/>Individual item"]
+        SearchBar["SearchBar"]
+        SearchFilters["SearchFilters"]
+        HomeSidebar["HomeSidebar<br/>Topics + Sources"]
+        OnboardingFlow["OnboardingFlow"]
+    end
 
-- **User intent capture**:
-  - For authenticated users with saved preferences: Feed auto-populates with recent signals matching their topics (limited to top 50 results)
-  - For all users: Search bar allows finding specific opportunities by keywords
-  - Users are encouraged to search for more specific results rather than browsing everything
-- **Background ingest**:
-  - `/api/sync` pulls from:
-    - RSS feeds (Defense News, DoD Press Releases, Grants.gov RSS)
-    - Grants.gov API (~50 recent grants with defense/SBIR focus)
-    - SAM.gov API (~75 recent contracts with DoD/tech focus) if API key is configured
-  - All items are normalized and upserted into Supabase table `feed_items`
-  - Intentionally limited to recent, focused items - users search for specific needs
-  - You can wire this to **Vercel Cron** or **Supabase scheduled functions** to run every 15-30 minutes in production
-- **Feed curation**:
-  - `/api/feed` reads recent items from `feed_items` instead of hitting external feeds on every request
-  - Items are scored based on:
-    - keyword overlap with the user query (plus stored preference topics)
-    - whether the full text contains the query
-    - recency (last 24h, 72h, 7d)
-    - funding type match (grants get boosted for SBIR/grant queries)
-  - The feed is sorted by score + time and limited to top 50 results
-  - Users are encouraged to refine their search for more specific opportunities
-- **Personalization & logging**:
-  - The most recent query is stored in `localStorage` so the feed “remembers” what you care about.
-  - The `/api/feed` endpoint also logs each query into a Supabase table `user_topics` (fire‑and‑forget), which can later power saved watchlists and analytics.
+    subgraph API["⚙️ API Routes"]
+        FeedAPI["/api/feed<br/>POST: Query → Scored Results"]
+        SyncAPI["/api/sync<br/>Refresh feed from sources"]
+        EngageAPI["/api/engage<br/>Track clicks & shares"]
+    end
 
-### Supabase schema
+    subgraph Logic["📊 Business Logic"]
+        Scoring["Scoring Engine<br/>rss.ts<br/>- Text relevance 0-100<br/>- Preference boost 0-50<br/>- Tags matching 0-20<br/>- Recency bonus"]
+        FeedStore["Feed Store<br/>feedStore.ts<br/>- Cache items<br/>- Upsert to DB"]
+        GovAPIs["Gov APIs<br/>govApis.ts<br/>- Grants.gov API<br/>- SAM.gov API"]
+    end
 
-Create a Supabase project and run:
+    subgraph DataSources["📡 Data Sources"]
+        DefenseRSS["Defense News RSS"]
+        DoDRSS["DoD Press Releases"]
+        GrantsAPI["Grants.gov API"]
+        SamAPI["SAM.gov API"]
+    end
 
-```sql
-create table if not exists public.user_topics (
-  id uuid primary key default gen_random_uuid(),
-  query text not null,
-  created_at timestamptz not null default now()
-);
+    subgraph Database["🗄️ Supabase PostgreSQL"]
+        FeedTable["feed_items<br/>500+ items cached"]
+        UserPrefs["user_preferences<br/>Saved topics"]
+        UserTopics["user_topics<br/>Search history"]
+    end
 
-alter table public.user_topics enable row level security;
-
-create policy "allow inserts from anon" on public.user_topics
-  for insert
-  to anon
-  with check (true);
-
-create table if not exists public.user_preferences (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references auth.users(id) on delete cascade,
-  topic text not null,
-  created_at timestamptz not null default now()
-);
-
-alter table public.user_preferences enable row level security;
-
-create policy "user can see own preferences" on public.user_preferences
-  for select
-  to authenticated
-  using (auth.uid() = user_id);
-
-create policy "user can insert own preferences" on public.user_preferences
-  for insert
-  to authenticated
-  with check (auth.uid() = user_id);
-
-create policy "user can update own preferences" on public.user_preferences
-  for update
-  to authenticated
-  using (auth.uid() = user_id)
-  with check (auth.uid() = user_id);
-
-create policy "user can delete own preferences" on public.user_preferences
-  for delete
-  to authenticated
-  using (auth.uid() = user_id);
+    Frontend --> Components
+    HomePage --> FeedList
+    SearchPage --> SearchBar
+    SearchPage --> SearchFilters
+    Components --> API
+    FeedList --> FeedCard
+    
+    API --> Logic
+    Logic --> Database
+    Logic --> DataSources
+    
+    FeedAPI --> Scoring
+    FeedAPI --> FeedStore
+    SyncAPI --> GovAPIs
+    SyncAPI --> FeedStore
+    EngageAPI --> Database
+    
+    GovAPIs --> GrantsAPI
+    GovAPIs --> SamAPI
+    SyncAPI --> DefenseRSS
+    SyncAPI --> DoDRSS
+    
+    FeedStore --> Database
+    Scoring --> FeedTable
+    Scoring --> UserPrefs
 ```
 
-Additional store for ingested feed items:
+## Project Structure
 
-```sql
-create table if not exists public.feed_items (
-  id text primary key,
-  source text not null,
-  title text not null,
-  url text not null,
-  published_at timestamptz,
-  summary text,
-  tags text[]
-);
-
-alter table public.feed_items enable row level security;
-
-create policy "public read feed items" on public.feed_items
-  for select
-  to anon
-  using (true);
+```
+src/
+├── app/                           # Next.js App Router
+│   ├── page.tsx                   # Home page (For You + Latest tabs)
+│   ├── search/
+│   │   └── page.tsx               # Search page with filters
+│   ├── account/
+│   │   └── page.tsx               # User preferences/settings
+│   ├── layout.tsx                 # Root layout
+│   └── api/
+│       ├── feed/
+│       │   └── route.ts           # Main feed endpoint (scoring + mixing)
+│       ├── sync/
+│       │   └── route.ts           # Background sync from all sources
+│       ├── engage/
+│       │   └── route.ts           # Track user clicks & shares
+│       └── trending/              # (deprecated)
+│
+├── components/                    # React components
+│   ├── FeedList.tsx               # List container with inline prompts
+│   ├── FeedCard.tsx               # Individual feed item display
+│   ├── SearchBar.tsx              # Search input
+│   ├── SearchFilters.tsx          # Filter controls (time, source, sort)
+│   ├── HomeSidebar.tsx            # Topics + sources sidebar
+│   ├── LayoutShell.tsx            # Main layout wrapper
+│   ├── OnboardingFlow.tsx         # First-time user flow
+│   ├── BottomNav.tsx              # Mobile navigation
+│   ├── AuthPreferencesPanel.tsx   # Account preferences UI
+│   ├── Providers.tsx              # Context providers
+│   ├── Toast.tsx                  # Toast notifications
+│   └── InlineFeedPrompt.tsx       # Feedback prompts in feed
+│
+├── lib/                           # Utilities & business logic
+│   ├── rss.ts                     # Core scoring algorithm (~250 lines)
+│   ├── feedStore.ts               # DB caching + sync coordination
+│   ├── govApis.ts                 # Grants.gov & SAM.gov integration
+│   ├── supabaseClient.ts          # Supabase client setup
+│   ├── engagement.ts              # Analytics tracking
+│   └── bookmarks.ts               # Bookmark utilities (deprecated)
+│
+└── types/
+    └── feed.ts                    # TypeScript interfaces
 ```
 
-Then set the env vars:
+## How It Works
 
-- `NEXT_PUBLIC_SUPABASE_URL` - Your Supabase project URL
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY` - Your Supabase anonymous key
-- `SAM_GOV_API_KEY` (Optional) - SAM.gov API key for contract opportunities
+### Data Flow
 
-**Getting a SAM.gov API Key (Optional):**
-1. Visit [SAM.gov](https://sam.gov)
-2. Sign in or create an account
-3. Navigate to **Account Details**
-4. Generate an API key
-5. Add it to your `.env.local` file
+1. **Background Sync** (`/api/sync`)
+   - Fetches from 4 sources: 2 RSS feeds, Grants.gov API, SAM.gov API
+   - Normalizes all items to `FeedItem` type
+   - Upserts into `feed_items` table (keeping 500 most recent)
+   - Runs on-demand or via Vercel Crons every 15-30 minutes
 
-Without the SAM.gov API key, the system will still work but will skip fetching contract opportunities from SAM.gov.
+2. **Feed Request** (`/api/feed` - POST)
+   - Receives user query + optional userId
+   - Loads saved preferences if authenticated
+   - Scores all stored items using `scoreFeedItemsFromQuery()`
+   - Returns two result sets:
+     - **"For You"**: Top 50 scored items ranked by relevance
+     - **"Latest"**: All items sorted by date with sources randomly mixed
 
-You can copy `.env.example` to `.env.local` and fill in your values.
+3. **Scoring Algorithm** (`src/lib/rss.ts`)
+   - **Text Relevance** (0-100 points): Matches query words against title/summary/tags
+   - **Preference Boost** (0-50 points): Extra weight for user's saved topics
+   - **Tags Matching** (0-20 points): Exact tag matches
+   - **Recency Bonus** (0-20 points): Very recent items get a boost
+   - Total score range: 0-190 points
 
-### Running locally
+4. **Frontend Rendering**
+   - **Home Page**: Shows "For You" vs "Latest" tabs
+     - Loads feed from user's saved preferences automatically
+     - No search bar - focuses on personalized content
+     - "For You" tab: Preference-ranked results
+     - "Latest" tab: Chronological with mixed sources to avoid clustering
+   - **Search Page**: Allows custom queries
+     - Searches across all 500 cached items
+     - Filters by source, time range, sort order
+     - Shows relevance ranking or date ordering
+   - **Account Page**: Set/manage preference topics
+
+### Key Components
+
+| Component | Purpose |
+|-----------|---------|
+| `FeedList` | Main feed container, renders items with inline prompts |
+| `FeedCard` | Individual item card with title, badge, tags, action buttons |
+| `SearchBar` | Query input (search page only) |
+| `SearchFilters` | Time range, source, and sort controls |
+| `HomeSidebar` | Shows saved topics and available data sources |
+| `OnboardingFlow` | First-time user topic selection dialog |
+| `LayoutShell` | Page layout wrapper with nav and sidebar |
+| `BottomNav` | Mobile navigation tabs |
+
+### Key Libraries
+
+| Library | Purpose |
+|---------|---------|
+| `rss-parser` | Parse RSS feeds |
+| `date-fns` | Date formatting |
+| `zod` | Request validation |
+| `@supabase/supabase-js` | Database client |
+| `Tailwind CSS` | Styling |
+
+## Stack
+
+- **Frontend**: Next.js 16+ (App Router, TypeScript), Tailwind CSS
+- **Backend**: Next.js Route Handlers
+- **Database**: Supabase PostgreSQL
+- **Data Sources**:
+  - Defense News & DoD Press Releases (RSS)
+  - Grants.gov (public API)
+  - SAM.gov (API - requires key)
+
+## Environment Setup
 
 ```bash
+# Clone and install
+git clone <repo>
+cd pryzm-project
 npm install
-npm run dev
+
+# Create .env.local
+cp .env.example .env.local
 ```
 
-Then open `http://localhost:3000`.
+Fill in `.env.local`:
+```
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+SAM_GOV_API_KEY=your-sam-key (optional)
+```
 
-### Deploying to Vercel
+**Getting SAM.gov API Key (Optional):**
+1. Visit [SAM.gov](https://sam.gov)
+2. Create an account
+3. Navigate to **Account Details**
+4. Generate an API key
+5. Add to `.env.local`
 
-1. Push this repo to GitHub.
-2. Create a new Vercel project from the repo.
-3. Add the Supabase env vars in **Project Settings → Environment Variables**.
-4. (Optional) Add a `CRON_SECRET` env var and configure a **Vercel Cron** job to hit:
+Without the SAM.gov key, the system still works but skips contract syncing.
 
-   - `GET https://your-project.vercel.app/api/sync?token=CRON_SECRET`
-
-5. Deploy – Vercel will detect Next.js and handle the rest.
-
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
-
-## Getting Started
-
-First, run the development server:
+## Running Locally
 
 ```bash
 npm run dev
 # or
 yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Deploying to Vercel
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. Push to GitHub
+2. Create Vercel project from repo
+3. Add env vars in **Project Settings → Environment Variables**
+4. *(Optional)* Set up Vercel Cron:
+   - Add `CRON_SECRET` env var
+   - Configure cron job to hit: `GET /api/sync?token=CRON_SECRET`
+   - Schedule: every 15-30 minutes
+
+Deploy – Vercel auto-detects Next.js.
 
 ## Learn More
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- [Next.js Docs](https://nextjs.org/docs)
+- [Supabase Docs](https://supabase.com/docs)
+- [Tailwind CSS](https://tailwindcss.com)
