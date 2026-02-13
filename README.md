@@ -235,7 +235,7 @@ Open [http://localhost:3000](http://localhost:3000)
 4. *(Optional)* Set up Vercel Cron:
    - Add `CRON_SECRET` env var
    - Configure cron job to hit: `GET /api/sync?token=CRON_SECRET`
-   - Schedule: every 15-30 minutes
+   - Schedule: Limited to 1 time a day with Vercel free trial.
 
 Deploy – Vercel auto-detects Next.js.
 
