@@ -10,5 +10,6 @@ export type FeedItem = {
   tags: string[];
   // Simple relevance score calculated on the backend
   score: number;
+  isBookmarked?: boolean;
 };
 

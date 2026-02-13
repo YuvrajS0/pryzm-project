@@ -40,7 +40,7 @@ export default function AccountPage() {
 
   async function handleSendReset() {
     if (!supabase || !user?.email) return;
-    setResetStatus("Sending password reset email…");
+    setResetStatus("Sending password reset email...");
     try {
       const origin =
         typeof window !== "undefined" ? window.location.origin : undefined;
@@ -56,62 +56,77 @@ export default function AccountPage() {
   }
 
   return (
-    <LayoutShell>
-      <div className="mx-auto flex max-w-3xl flex-col gap-6">
-        <section className="space-y-3 rounded-2xl border border-white/10 bg-white/5 p-4 text-xs text-zinc-200">
-          <h2 className="text-sm font-semibold text-zinc-50">
-            Account & preference settings
-          </h2>
-          <p className="text-[11px] text-zinc-300">
-            Manage your login details and the preference topics that drive your feed. Your
-            home feed is primarily ranked using these saved preferences; the search bar
-            just lets you steer them in the moment.
+    <LayoutShell pageTitle="Settings">
+      <div className="divide-y divide-border">
+        {/* Profile Section */}
+        <section className="px-4 py-5">
+          <h2 className="text-[15px] font-bold text-text-primary">Profile</h2>
+          <p className="mt-1 text-[13px] text-text-secondary">
+            Manage your account and the preferences that drive your feed.
           </p>
+
           {!supabase && (
-            <p className="text-[11px] text-yellow-200">
-              Supabase is not configured. Add your Supabase URL and anon key to enable
-              account details.
+            <p className="mt-3 text-[13px] text-warning">
+              Supabase is not configured. Add your Supabase URL and anon key to
+              enable account features.
             </p>
           )}
+
           {supabase && loadingUser && (
-            <p className="text-[11px] text-zinc-400">Loading account details…</p>
-          )}
-          {supabase && !loadingUser && !user && (
-            <p className="text-[11px] text-zinc-300">
-              You&apos;re not signed in. Go back to the home page and use the right-hand
-              panel to sign in or create an account.
+            <p className="mt-3 text-[13px] text-text-secondary">
+              Loading account details...
             </p>
           )}
+
+          {supabase && !loadingUser && !user && (
+            <p className="mt-3 text-[13px] text-text-secondary">
+              You&apos;re not signed in. Use the panel below to sign in or
+              create an account.
+            </p>
+          )}
+
           {user && (
-            <div className="mt-2 space-y-1.5 rounded-xl bg-black/30 p-3 text-[11px] text-zinc-200">
-              <p>
-                <span className="text-zinc-400">Email:</span>{" "}
-                <span className="font-medium text-zinc-50">{user.email}</span>
-              </p>
-              {user.last_sign_in_at && (
-                <p className="text-zinc-400">
-                  Last sign-in:{" "}
-                  <span className="text-zinc-200">
-                    {new Date(user.last_sign_in_at).toLocaleString()}
-                  </span>
-                </p>
-              )}
+            <div className="mt-4 space-y-3">
+              {/* Avatar + email */}
+              <div className="flex items-center gap-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-accent text-lg font-bold text-white">
+                  {user.email?.[0]?.toUpperCase() ?? "?"}
+                </div>
+                <div>
+                  <p className="text-[15px] font-bold text-text-primary">
+                    {user.email}
+                  </p>
+                  {user.last_sign_in_at && (
+                    <p className="text-[13px] text-text-secondary">
+                      Last sign-in:{" "}
+                      {new Date(user.last_sign_in_at).toLocaleString()}
+                    </p>
+                  )}
+                </div>
+              </div>
+
               <button
                 type="button"
                 onClick={handleSendReset}
-                className="mt-1 inline-flex items-center rounded-full border border-white/15 bg-white/5 px-3 py-1 text-[11px] font-medium text-zinc-100 hover:border-blue-400 hover:text-blue-100"
+                className="rounded-full border border-border px-4 py-2 text-[13px] font-medium text-text-primary transition-colors hover:bg-surface-hover"
               >
                 Send password reset email
               </button>
               {resetStatus && (
-                <p className="mt-1 text-[11px] text-zinc-300">{resetStatus}</p>
+                <p className="text-[13px] text-text-secondary">{resetStatus}</p>
               )}
             </div>
           )}
         </section>
-        <AuthPreferencesPanel onPreferencesChange={() => {}} />
+
+        {/* Preferences Section */}
+        <section className="px-4 py-5">
+          <h2 className="mb-3 text-[15px] font-bold text-text-primary">
+            Topics & Preferences
+          </h2>
+          <AuthPreferencesPanel onPreferencesChange={() => {}} />
+        </section>
       </div>
     </LayoutShell>
   );
 }
-

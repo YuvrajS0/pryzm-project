@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Search } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Search, X } from "lucide-react";
 
 type SearchBarProps = {
   initialQuery?: string;
@@ -12,6 +12,12 @@ type SearchBarProps = {
 export function SearchBar({ initialQuery, onSearch, loading }: SearchBarProps) {
   const [value, setValue] = useState(initialQuery ?? "");
 
+  useEffect(() => {
+    if (initialQuery != null) {
+      setValue(initialQuery);
+    }
+  }, [initialQuery]);
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = value.trim();
@@ -19,28 +25,37 @@ export function SearchBar({ initialQuery, onSearch, loading }: SearchBarProps) {
     onSearch(trimmed);
   }
 
+  function handleClear() {
+    setValue("");
+  }
+
   return (
     <form
       onSubmit={handleSubmit}
-      className="flex w-full items-center gap-3 rounded-2xl border border-zinc-200 bg-white px-4 py-3 shadow-sm ring-1 ring-transparent transition-all focus-within:ring-blue-500 dark:border-zinc-800 dark:bg-zinc-950"
+      className="flex w-full items-center gap-2 rounded-full border border-border bg-surface px-4 py-2.5 transition-all focus-within:border-accent focus-within:ring-1 focus-within:ring-accent"
     >
-      <Search className="h-5 w-5 text-zinc-400" />
+      <Search className="h-5 w-5 shrink-0 text-text-secondary" />
       <input
         type="text"
-        placeholder="What are you tracking? e.g. autonomous drones, SBIR, cyber, space ISR..."
-        className="flex-1 border-none bg-transparent text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-0 dark:text-zinc-50"
+        placeholder="Search signals..."
+        className="flex-1 border-none bg-transparent text-[15px] text-text-primary placeholder:text-text-tertiary focus:outline-none"
         value={value}
         onChange={(e) => setValue(e.target.value)}
         disabled={loading}
       />
-      <button
-        type="submit"
-        disabled={loading}
-        className="inline-flex items-center gap-1 rounded-full bg-blue-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-400"
-      >
-        {loading ? "Searching..." : "Search"}
-      </button>
+      {value && !loading && (
+        <button
+          type="button"
+          onClick={handleClear}
+          className="rounded-full p-1 transition-colors hover:bg-surface-hover"
+          aria-label="Clear search"
+        >
+          <X className="h-4 w-4 text-text-secondary" />
+        </button>
+      )}
+      {loading && (
+        <div className="h-5 w-5 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+      )}
     </form>
   );
 }
-

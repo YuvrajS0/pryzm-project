@@ -306,3 +306,4 @@ function getDateDaysAgo(days: number): string {
   const year = date.getFullYear();
   return `${month}/${day}/${year}`;
 }
+

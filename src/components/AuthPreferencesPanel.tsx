@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { User } from "@supabase/supabase-js";
+import { X } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 
 type Preference = {
@@ -14,6 +15,21 @@ type AuthPreferencesPanelProps = {
 };
 
 type AuthMode = "sign_in" | "sign_up";
+
+const SUGGESTED_TOPICS = [
+  "Autonomous Systems",
+  "SBIR/STTR",
+  "Cyber Defense",
+  "Space & Satellites",
+  "Counter-UAS",
+  "Directed Energy",
+  "AI/ML",
+  "Electronic Warfare",
+  "Hypersonics",
+  "Naval Systems",
+  "Grants & Funding",
+  "JADC2",
+];
 
 export function AuthPreferencesPanel({
   onPreferencesChange,
@@ -134,11 +150,9 @@ export function AuthPreferencesPanel({
     onPreferencesChange([]);
   }
 
-  async function handleAddPreference(e: React.FormEvent) {
-    e.preventDefault();
+  async function addTopic(topic: string) {
     if (!supabase || !user) return;
-
-    const trimmed = newPref.trim();
+    const trimmed = topic.trim();
     if (!trimmed) return;
 
     setPrefsLoading(true);
@@ -168,6 +182,11 @@ export function AuthPreferencesPanel({
     } finally {
       setPrefsLoading(false);
     }
+  }
+
+  async function handleAddPreference(e: React.FormEvent) {
+    e.preventDefault();
+    await addTopic(newPref);
   }
 
   async function handleRemovePreference(id: string) {
@@ -230,54 +249,50 @@ export function AuthPreferencesPanel({
     }
   }
 
+  // NOT CONFIGURED
   if (!supabase) {
     return (
-      <div className="rounded-xl border border-yellow-500/40 bg-yellow-500/10 p-3 text-[11px] text-yellow-50">
+      <div className="rounded-xl border border-warning/40 bg-warning/10 p-3 text-[13px] text-warning">
         Supabase is not configured. Add <code>NEXT_PUBLIC_SUPABASE_URL</code> and{" "}
         <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code> to enable login and preferences.
       </div>
     );
   }
 
+  // NOT LOGGED IN
   if (!user) {
     return (
-      <div className="space-y-3 rounded-2xl border border-white/10 bg-white/5 p-3">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
-          Log in to save preferences
+      <div className="space-y-4">
+        <p className="text-[13px] text-text-secondary">
+          Sign in to save preference topics that personalize your feed.
         </p>
-        <p className="text-[11px] text-zinc-300">
-          Create a lightweight account so we can remember the topics you care about and use
-          them to bias your feed.
-        </p>
-        <form onSubmit={handleAuthSubmit} className="space-y-2.5 text-[11px]">
-          <div className="space-y-1.5">
-            <input
-              type="email"
-              required
-              placeholder="you@company.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-lg border border-white/15 bg-black/40 px-2.5 py-1.5 text-[11px] text-zinc-50 placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            />
-            <input
-              type="password"
-              required
-              minLength={6}
-              placeholder="Password (min 6 chars)"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-lg border border-white/15 bg-black/40 px-2.5 py-1.5 text-[11px] text-zinc-50 placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            />
-          </div>
+        <form onSubmit={handleAuthSubmit} className="space-y-3">
+          <input
+            type="email"
+            required
+            placeholder="you@company.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-[14px] text-text-primary placeholder:text-text-tertiary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+          />
+          <input
+            type="password"
+            required
+            minLength={6}
+            placeholder="Password (min 6 chars)"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-[14px] text-text-primary placeholder:text-text-tertiary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+          />
           {authError && (
-            <p className="rounded-lg border border-red-500/40 bg-red-500/10 px-2 py-1 text-[10px] text-red-100">
+            <p className="rounded-lg border border-danger/40 bg-danger/10 px-3 py-2 text-[13px] text-danger">
               {authError}
             </p>
           )}
           <button
             type="submit"
             disabled={authLoading}
-            className="flex w-full items-center justify-center rounded-full bg-blue-600 px-3 py-1.5 text-[11px] font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-500"
+            className="flex w-full items-center justify-center rounded-full bg-accent py-2.5 text-[14px] font-bold text-white transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
           >
             {authLoading
               ? "Working..."
@@ -291,7 +306,7 @@ export function AuthPreferencesPanel({
           onClick={() =>
             setAuthMode((m) => (m === "sign_in" ? "sign_up" : "sign_in"))
           }
-          className="w-full text-center text-[11px] text-zinc-400 hover:text-zinc-200"
+          className="w-full text-center text-[13px] text-text-secondary hover:text-accent"
         >
           {authMode === "sign_in"
             ? "No account yet? Create one."
@@ -301,87 +316,109 @@ export function AuthPreferencesPanel({
     );
   }
 
+  // LOGGED IN
+  const existingTopics = new Set(preferences.map((p) => p.topic.toLowerCase()));
+
   return (
-    <div className="space-y-3 rounded-2xl border border-white/10 bg-white/5 p-3">
+    <div className="space-y-4">
       <div className="flex items-center justify-between gap-2">
-        <div className="space-y-0.5">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
-            Your preference topics
-          </p>
-          <p className="text-[11px] text-zinc-300">
-            We blend these terms into your search so your feed leans toward what you
-            repeatedly track.
-          </p>
-        </div>
+        <p className="text-[13px] text-text-secondary">
+          These topics personalize your home feed.
+        </p>
         <button
           type="button"
           onClick={handleSignOut}
-          className="rounded-full border border-white/15 px-2 py-1 text-[10px] text-zinc-300 hover:bg-white/10"
+          className="rounded-full border border-border px-3 py-1.5 text-[13px] text-text-secondary transition-colors hover:border-danger hover:text-danger"
         >
           Sign out
         </button>
       </div>
 
+      {/* Add topic */}
       <form
         onSubmit={handleAddPreference}
-        className="flex items-center gap-2 text-[11px]"
+        className="flex items-center gap-2"
       >
         <input
           type="text"
           placeholder="Add a topic (e.g. AFWERX SBIR, C-UAS, hypersonics)"
           value={newPref}
           onChange={(e) => setNewPref(e.target.value)}
-          className="flex-1 rounded-lg border border-white/15 bg-black/40 px-2.5 py-1.5 text-[11px] text-zinc-50 placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          className="flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-[14px] text-text-primary placeholder:text-text-tertiary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
         />
         <button
           type="submit"
           disabled={prefsLoading}
-          className="rounded-full bg-blue-600 px-3 py-1.5 text-[11px] font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-500"
+          className="rounded-full bg-accent px-4 py-2 text-[14px] font-bold text-white transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
         >
           Add
         </button>
       </form>
 
       {prefsError && (
-        <p className="rounded-lg border border-red-500/40 bg-red-500/10 px-2 py-1 text-[10px] text-red-100">
+        <p className="rounded-lg border border-danger/40 bg-danger/10 px-3 py-2 text-[13px] text-danger">
           {prefsError}
         </p>
       )}
 
-      <div className="flex flex-wrap gap-1.5">
+      {/* Current preferences */}
+      <div className="flex flex-wrap gap-2">
         {preferences.length === 0 && !prefsLoading && (
-          <span className="text-[11px] text-zinc-400">
-            No preferences yet. Add 2–5 topics you deeply care about.
+          <span className="text-[13px] text-text-tertiary">
+            No preferences yet. Add 2-5 topics you deeply care about.
           </span>
         )}
         {preferences.map((pref) => (
           <div
             key={pref.id}
-            className="group inline-flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-1 text-[11px] text-zinc-50 hover:bg-white/20"
+            className="group inline-flex items-center gap-1.5 rounded-full bg-accent-muted px-3 py-1.5 text-[13px] font-medium text-accent"
           >
             <button
               type="button"
               onClick={() => void handleEditPreference(pref)}
-              className="max-w-[140px] truncate text-left"
-              title="Click to rename this preference"
+              className="max-w-[160px] truncate text-left"
+              title="Click to rename"
             >
               {pref.topic}
             </button>
             <button
               type="button"
               onClick={() => void handleRemovePreference(pref.id)}
-              className="text-[10px] text-zinc-400 hover:text-red-300"
-              title="Remove this preference"
+              className="text-text-tertiary transition-colors hover:text-danger"
+              title="Remove"
             >
-              ✕
+              <X className="h-3.5 w-3.5" />
             </button>
           </div>
         ))}
         {prefsLoading && (
-          <span className="text-[11px] text-zinc-400">Syncing preferences…</span>
+          <span className="text-[13px] text-text-secondary">Syncing...</span>
         )}
       </div>
+
+      {/* Suggested topics */}
+      {preferences.length < 8 && (
+        <div>
+          <p className="mb-2 text-[12px] font-medium uppercase tracking-wide text-text-tertiary">
+            Suggested topics
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {SUGGESTED_TOPICS.filter(
+              (t) => !existingTopics.has(t.toLowerCase()),
+            ).map((topic) => (
+              <button
+                key={topic}
+                type="button"
+                onClick={() => void addTopic(topic)}
+                disabled={prefsLoading}
+                className="rounded-full border border-border px-3 py-1.5 text-[13px] text-text-secondary transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
+              >
+                + {topic}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-

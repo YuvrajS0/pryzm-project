@@ -4,12 +4,18 @@ import { fetchAllRssItems } from "@/lib/rss";
 
 export async function syncFeedItems() {
   if (!supabase) {
+    console.error("[syncFeedItems] Supabase not configured");
     throw new Error("Supabase is not configured");
   }
 
+  console.log("[syncFeedItems] Starting sync...");
   const items = await fetchAllRssItems();
+  console.log("[syncFeedItems] Fetched", items.length, "items");
 
-  if (!items.length) return;
+  if (!items.length) {
+    console.warn("[syncFeedItems] No items to sync");
+    return;
+  }
 
   // De-duplicate by id to avoid ON CONFLICT hitting the same row twice
   const byId = new Map<string, FeedItem>();
@@ -29,13 +35,17 @@ export async function syncFeedItems() {
     tags: item.tags,
   }));
 
+  console.log("[syncFeedItems] Upserting", rows.length, "rows to feed_items");
   const { error } = await supabase.from("feed_items").upsert(rows, {
     onConflict: "id",
   });
 
   if (error) {
+    console.error("[syncFeedItems] Upsert error:", error);
     throw error;
   }
+  
+  console.log("[syncFeedItems] Sync complete");
 }
 
 export async function getRecentFeedItemsFromStore(): Promise<FeedItem[]> {
