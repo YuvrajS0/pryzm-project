@@ -125,7 +125,7 @@ export async function fetchGrantsGovOpportunities(
           source: "grants" as const,
           title: opp.title,
           url: `https://www.grants.gov/search-results-detail/${opp.id}`,
-          publishedAt: opp.openDate || new Date().toISOString(),
+          publishedAt: toISODate(opp.openDate) || new Date().toISOString(),
           summary: summary,
           tags: [
             "grant",
@@ -255,7 +255,7 @@ export async function fetchSamGovOpportunities(
           source: "contracts" as const,
           title: opp.title,
           url: `https://sam.gov/opp/${opp.noticeId}/view`,
-          publishedAt: opp.postedDate || new Date().toISOString(),
+          publishedAt: toISODate(opp.postedDate) || new Date().toISOString(),
           summary: summary,
           tags: [
             "contract",
@@ -282,6 +282,24 @@ export async function fetchSamGovOpportunities(
   }
 
   return Array.from(uniqueItems.values());
+}
+
+/**
+ * Parse a date string (MM/DD/YYYY or other formats) into an ISO string.
+ * Returns null if parsing fails.
+ */
+function toISODate(dateStr: string | undefined | null): string | null {
+  if (!dateStr) return null;
+  // Try direct Date parsing first (handles ISO, RFC2822, etc.)
+  const parsed = new Date(dateStr);
+  if (!isNaN(parsed.getTime())) return parsed.toISOString();
+  // Try MM/DD/YYYY explicitly
+  const match = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (match) {
+    const d = new Date(Number(match[3]), Number(match[1]) - 1, Number(match[2]));
+    if (!isNaN(d.getTime())) return d.toISOString();
+  }
+  return null;
 }
 
 /**

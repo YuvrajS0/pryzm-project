@@ -182,8 +182,8 @@ export async function POST(request: Request) {
       });
 
       return NextResponse.json({
-        for_you: scored.slice(0, 50),
-        latest: mixSourcesInFeed(latestSorted),
+        for_you: mixSourcesInFeed(scored.slice(0, 50)),
+        latest: latestSorted,
       });
     }
 

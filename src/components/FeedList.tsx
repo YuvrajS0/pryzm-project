@@ -3,16 +3,16 @@
 import { useCallback, useMemo, useState } from "react";
 import type { FeedItem } from "@/types/feed";
 import { FeedCard } from "./FeedCard";
-import { InlineFeedPrompt } from "./InlineFeedPrompt";
 import { useToast } from "./Toast";
 import { trackShare, trackClick } from "@/lib/engagement";
 
 type FeedListProps = {
   items: FeedItem[];
   query: string;
+  showRank?: boolean;
 };
 
-export function FeedList({ items }: FeedListProps) {
+export function FeedList({ items, showRank = false }: FeedListProps) {
   const { showToast } = useToast();
 
   const handleShare = useCallback(
@@ -46,23 +46,11 @@ export function FeedList({ items }: FeedListProps) {
       <FeedCard
         key={item.id}
         item={item}
-        rank={i}
+        rank={showRank ? i : undefined}
         onShare={handleShare}
       />,
     );
 
-    // Track clicks when card links are clicked (via delegation)
-    // Insert inline prompts at position 20
-    if (i === 19) {
-      elements.push(
-        <InlineFeedPrompt
-          key="prompt-feedback"
-          variant="feedback"
-          onFeedbackPositive={() => showToast("Thanks for the feedback!")}
-          onFeedbackNegative={() => showToast("We'll adjust your feed")}
-        />,
-      );
-    }
   }
 
   return (

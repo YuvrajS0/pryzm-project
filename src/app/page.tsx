@@ -1,14 +1,21 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { LayoutShell } from "@/components/LayoutShell";
 import { FeedList } from "@/components/FeedList";
 import { HomeSidebar } from "@/components/HomeSidebar";
 import { OnboardingFlow } from "@/components/OnboardingFlow";
-import type { FeedItem } from "@/types/feed";
+import type { FeedItem, FeedSource } from "@/types/feed";
 import { supabase } from "@/lib/supabaseClient";
 
 type FeedTab = "for_you" | "latest";
+
+const SOURCE_FILTERS: { value: FeedSource | "all"; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "defense_news", label: "Defense" },
+  { value: "grants", label: "Grants" },
+  { value: "contracts", label: "SAM.gov" },
+];
 
 export default function Home() {
   const [forYouItems, setForYouItems] = useState<FeedItem[]>([]);
@@ -21,6 +28,7 @@ export default function Home() {
   const [userId, setUserId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<FeedTab>("for_you");
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [latestSourceFilter, setLatestSourceFilter] = useState<FeedSource | "all">("all");
 
   useEffect(() => {
     if (!supabase) {
@@ -105,8 +113,13 @@ export default function Home() {
     }
   }
 
+  const filteredLatestItems = useMemo(() => {
+    if (latestSourceFilter === "all") return latestItems;
+    return latestItems.filter((item) => item.source === latestSourceFilter);
+  }, [latestItems, latestSourceFilter]);
+
   const displayItems =
-    activeTab === "for_you" ? forYouItems : latestItems;
+    activeTab === "for_you" ? forYouItems : filteredLatestItems;
 
   return (
     <>
@@ -156,6 +169,26 @@ export default function Home() {
         </button>
       </div>
 
+      {/* Source filter for Latest tab */}
+      {activeTab === "latest" && latestItems.length > 0 && (
+        <div className="flex items-center gap-1.5 border-b border-border px-4 py-2">
+          {SOURCE_FILTERS.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => setLatestSourceFilter(opt.value)}
+              className={`rounded-full px-3 py-1 text-[12px] font-medium transition-colors ${
+                latestSourceFilter === opt.value
+                  ? "bg-accent text-white"
+                  : "border border-border text-text-secondary hover:border-accent hover:text-accent"
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Error */}
       {error && (
         <div className="border-b border-border px-4 py-3">
@@ -181,7 +214,7 @@ export default function Home() {
       )}
 
       {/* Feed */}
-      <FeedList items={displayItems} query="" />
+      <FeedList items={displayItems} query="" showRank={activeTab === "for_you"} />
     </LayoutShell>
     </>
   );

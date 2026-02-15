@@ -50,6 +50,16 @@ export function HomeSidebar({ items, preferences, isLoggedIn }: HomeSidebarProps
 
 
 
+      {/* Feed Stats */}
+      {items.length > 0 && (
+        <div className="rounded-2xl border border-border bg-surface p-4">
+          <h3 className="mb-2 text-lg font-bold text-text-primary">Feed Stats</h3>
+          <p className="text-[13px] text-text-secondary">
+            {items.length} signal{items.length !== 1 ? "s" : ""} curated for you
+          </p>
+        </div>
+      )}
+
       {/* Sources */}
       <div className="rounded-2xl border border-border bg-surface p-4">
         <h3 className="mb-3 text-lg font-bold text-text-primary">Sources</h3>

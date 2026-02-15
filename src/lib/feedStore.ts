@@ -57,7 +57,7 @@ export async function getRecentFeedItemsFromStore(): Promise<FeedItem[]> {
     .from("feed_items")
     .select("id, source, title, url, published_at, summary, tags")
     .order("published_at", { ascending: false })
-    .limit(500);
+    .limit(1000);
 
   if (error) {
     throw error;

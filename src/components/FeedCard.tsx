@@ -1,13 +1,16 @@
 "use client";
 
+import { useState } from "react";
 import { formatDistanceToNow } from "date-fns";
-import { Share2, ExternalLink, BadgeCheck } from "lucide-react";
+import { Share2, ExternalLink, BadgeCheck, Zap, Bookmark } from "lucide-react";
 import type { FeedItem } from "@/types/feed";
+import { toggleBookmark, getBookmarkedIds } from "@/lib/engagement";
 
 type FeedCardProps = {
   item: FeedItem;
   rank?: number;
   onShare?: (item: FeedItem) => void;
+  onBookmarkChange?: (itemId: string, bookmarked: boolean) => void;
 };
 
 function sourceLabel(source: FeedItem["source"]) {
@@ -53,7 +56,9 @@ function isGovSource(source: FeedItem["source"]) {
   return source === "grants" || source === "contracts";
 }
 
-export function FeedCard({ item, rank, onShare }: FeedCardProps) {
+export function FeedCard({ item, rank, onShare, onBookmarkChange }: FeedCardProps) {
+  const [bookmarked, setBookmarked] = useState(() => getBookmarkedIds().has(item.id));
+
   const published =
     item.publishedAt != null
       ? formatDistanceToNow(new Date(item.publishedAt), { addSuffix: true })
@@ -66,9 +71,21 @@ export function FeedCard({ item, rank, onShare }: FeedCardProps) {
 
   const isTopSignal = rank != null && rank < 3;
 
+  function handleBookmark(e: React.MouseEvent) {
+    e.preventDefault();
+    const isNow = toggleBookmark(item.id);
+    setBookmarked(isNow);
+    onBookmarkChange?.(item.id, isNow);
+  }
+
   return (
     <article className="relative px-4 py-3 transition-colors hover:bg-surface-hover feed-divider">
-
+      {isTopSignal && (
+        <div className="mb-1 flex items-center gap-1 pl-13">
+          <Zap className="h-3.5 w-3.5 text-accent" />
+          <span className="text-[12px] font-bold text-accent">Top Signal</span>
+        </div>
+      )}
 
       <div className="flex gap-3">
         {/* Source Avatar */}
@@ -140,6 +157,15 @@ export function FeedCard({ item, rank, onShare }: FeedCardProps) {
               aria-label="Share"
             >
               <Share2 className="h-4 w-4 text-text-tertiary transition-colors group-hover:text-accent" />
+            </button>
+
+            <button
+              type="button"
+              onClick={handleBookmark}
+              className="group flex items-center gap-1 rounded-full p-2 transition-colors hover:bg-accent-muted"
+              aria-label={bookmarked ? "Remove bookmark" : "Bookmark"}
+            >
+              <Bookmark className={`h-4 w-4 transition-colors ${bookmarked ? "fill-accent text-accent" : "text-text-tertiary group-hover:text-accent"}`} />
             </button>
 
             <a

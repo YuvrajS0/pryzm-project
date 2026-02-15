@@ -44,24 +44,6 @@ export const RSS_SOURCES: RssSourceConfig[] = [
     url: "https://www.defense.gov/DesktopModules/ArticleCS/RSS.ashx?ContentType=1",
     defaultTags: ["dod", "press-release", "policy"],
   },
-  {
-    id: "grants-new-opportunities",
-    source: "grants",
-    url: "https://www.grants.gov/rss/GG_NewOppByCategory.xml",
-    defaultTags: ["grant", "funding", "federal"],
-  },
-  {
-    id: "grants-new-opportunities-agency",
-    source: "grants",
-    url: "https://www.grants.gov/rss/GG_NewOppByAgency.xml",
-    defaultTags: ["grant", "agency", "federal"],
-  },
-  {
-    id: "grants-modified-opportunities-agency",
-    source: "grants",
-    url: "https://www.grants.gov/rss/GG_OppModByAgency.xml",
-    defaultTags: ["grant", "modification", "federal"],
-  },
 ];
 
 export type NormalizedRssItem = FeedItem;
@@ -248,7 +230,7 @@ export function scoreFeedItemsFromQuery(
       textRelevance + preferenceBoost + searchHistoryBoost + tagsBoost + sourceAffinityBoost;
     const finalScore =
       relevanceWeight * (relevanceScore / 2) +
-      (1 - relevanceWeight) * recencyBoost;
+      (1 - relevanceWeight) * (recencyBoost * 5);
 
     return {
       ...item,
