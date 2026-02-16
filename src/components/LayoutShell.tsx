@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { Home, Search, User, Zap } from "lucide-react";
+import { Home, Search, User } from "lucide-react";
 import { BottomNav } from "./BottomNav";
 
 type LayoutShellProps = {
@@ -30,8 +30,7 @@ export function LayoutShell({ children, sidebar, pageTitle }: LayoutShellProps) 
               href="/"
               className="mb-4 flex items-center gap-2 rounded-full px-3 py-3 transition-colors hover:bg-surface-hover"
             >
-              <Zap className="h-7 w-7 text-accent" />
-              <span className="text-xl font-bold tracking-tight">Pryzm</span>
+              <span className="text-xl font-bold tracking-tight">Yuvraj-Pryzm</span>
             </a>
 
             {/* Nav Links */}

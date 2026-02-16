@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Zap, X } from "lucide-react";
+import { X } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 
 const TOPIC_OPTIONS = [
@@ -90,9 +90,8 @@ export function OnboardingFlow({ userId, onComplete }: OnboardingFlowProps) {
         {step === 0 && (
           <div className="space-y-5">
             <div className="flex items-center gap-2">
-              <Zap className="h-6 w-6 text-accent" />
               <h2 className="text-xl font-bold text-text-primary">
-                Welcome to Pryzm
+                Welcome to Yuvraj-Pryzm
               </h2>
             </div>
             <p className="text-[15px] text-text-secondary">

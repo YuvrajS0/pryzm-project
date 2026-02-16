@@ -202,7 +202,7 @@ export default function Home() {
       {!loading && hasLoadedPreferences && forYouItems.length === 0 && latestItems.length === 0 && (
         <div className="px-4 py-10 text-center">
           <p className="text-[15px] font-bold text-text-primary">
-            Welcome to Pryzm
+            Welcome to Yuvraj-Pryzm
           </p>
           <p className="mt-2 text-[13px] text-text-secondary">
             <a href="/account" className="text-accent hover:underline">
