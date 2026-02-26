@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { scoreFeedItemsFromQuery } from "@/lib/rss";
+import { scoreFeedItemsFromQuery, fetchDefenseNewsForTopics } from "@/lib/rss";
 import type { UserScoringContext } from "@/lib/rss";
 import type { FeedItem } from "@/types/feed";
 import { supabase } from "@/lib/supabaseClient";
-import { getRecentFeedItemsFromStore, syncFeedItems } from "@/lib/feedStore";
+import { getRecentFeedItemsFromStore, syncFeedItems, fetchLiveItemsForPreferences } from "@/lib/feedStore";
 
 /**
  * Mix feed sources throughout the feed while maintaining chronological order within each source
@@ -142,7 +142,33 @@ export async function POST(request: Request) {
       // Load user context for personalized scoring
       const userContext = userId ? await loadUserContext(userId) : undefined;
 
-      let scored = scoreFeedItemsFromQuery(storedItems, query, userContext);
+      // Fetch live targeted items in parallel using the user's saved topics.
+      // - Gov items (Grants/SAM): merged into storedItems → appear in both For You and Latest
+      // - Defense news items (Google News RSS): used for scoring only → For You only,
+      //   since they carry Google News redirect URLs rather than direct article links.
+      const [liveGovItems, liveDefenseItems] = await Promise.all([
+        userContext?.preferences?.length
+          ? fetchLiveItemsForPreferences(userContext.preferences)
+          : Promise.resolve([]),
+        userContext?.preferences?.length
+          ? fetchDefenseNewsForTopics(userContext.preferences)
+          : Promise.resolve([]),
+      ]);
+
+      if (liveGovItems.length > 0) {
+        const existingIds = new Set(storedItems.map((i) => i.id));
+        const newGovItems = liveGovItems.filter((i) => !existingIds.has(i.id));
+        storedItems = [...newGovItems, ...storedItems];
+        console.log(`[/api/feed] Added ${newGovItems.length} live gov items`);
+      }
+
+      // forYouPool includes defense news targeted items on top of storedItems
+      const forYouPool = liveDefenseItems.length > 0
+        ? [...liveDefenseItems, ...storedItems]
+        : storedItems;
+      console.log(`[/api/feed] Added ${liveDefenseItems.length} live defense news items for scoring`);
+
+      let scored = scoreFeedItemsFromQuery(forYouPool, query, userContext);
       console.log("[/api/feed] After scoring, got", scored.length, "items");
 
       // If we got almost no matches, run a fresh sync

@@ -123,6 +123,58 @@ export async function fetchAllRssItems(): Promise<FeedItem[]> {
   return items.filter((item) => item.title && item.url !== "#");
 }
 
+/**
+ * Fetch Defense News articles targeted to the user's preference topics via
+ * Google News RSS search (scoped to defensenews.com). Returns items for the
+ * "For You" scoring pool only — NOT stored in the DB or shown in Latest,
+ * since links are Google News redirect URLs rather than direct article URLs.
+ */
+export async function fetchDefenseNewsForTopics(topics: string[]): Promise<FeedItem[]> {
+  if (!topics.length) return [];
+
+  const results = await Promise.allSettled(
+    topics.slice(0, 5).map(async (topic) => {
+      const q = encodeURIComponent(`${topic} site:defensenews.com`);
+      const url = `https://news.google.com/rss/search?q=${q}&hl=en-US&gl=US&ceid=US:en`;
+      try {
+        const feed = await parser.parseURL(url);
+        return (feed.items ?? []).slice(0, 8).map<FeedItem>((item, index) => {
+          const title = (item.title ?? "Untitled").replace(/ - Defense News$/, "");
+          const link = item.link ?? "#";
+          const pubDate = item.pubDate ? new Date(item.pubDate) : null;
+          const guid = (item.guid as string | undefined) ?? `${topic}-${index}`;
+          return {
+            id: `gnews-${guid}`,
+            source: "defense_news" as const,
+            title,
+            url: link,
+            publishedAt: pubDate ? pubDate.toISOString() : null,
+            summary: null,
+            // Tag with the preference topic so scoring gives a strong boost
+            tags: ["defense", "defense-news", topic.toLowerCase()],
+            score: 0,
+          };
+        });
+      } catch {
+        return [];
+      }
+    }),
+  );
+
+  const items: FeedItem[] = [];
+  for (const result of results) {
+    if (result.status === "fulfilled") items.push(...result.value);
+  }
+
+  // Deduplicate by ID across topics
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    if (seen.has(item.id)) return false;
+    seen.add(item.id);
+    return true;
+  });
+}
+
 export type UserScoringContext = {
   preferences?: string[];
   recentSearches?: string[];

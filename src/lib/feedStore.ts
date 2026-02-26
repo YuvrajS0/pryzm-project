@@ -1,6 +1,7 @@
 import { supabase } from "@/lib/supabaseClient";
 import type { FeedItem } from "@/types/feed";
 import { fetchAllRssItems } from "@/lib/rss";
+import { fetchGrantsForKeywords, fetchSamForKeywords } from "@/lib/govApis";
 
 export async function syncFeedItems() {
   if (!supabase) {
@@ -46,6 +47,48 @@ export async function syncFeedItems() {
   }
   
   console.log("[syncFeedItems] Sync complete");
+}
+
+/**
+ * Fetch live targeted items from Grants.gov and SAM.gov using the user's
+ * saved topics. Called on every feed load to surface fresh, preference-matched
+ * content that may not yet be in the daily sync.
+ */
+export async function fetchLiveItemsForPreferences(topics: string[]): Promise<FeedItem[]> {
+  if (!topics.length) return [];
+
+  // Use up to 5 topics joined as a single keyword query
+  const keyword = topics.slice(0, 5).join(" ");
+
+  const [grantsResult, samResult] = await Promise.allSettled([
+    fetchGrantsForKeywords(keyword, 20),
+    fetchSamForKeywords(keyword, 20),
+  ]);
+
+  const items: FeedItem[] = [];
+  if (grantsResult.status === "fulfilled") items.push(...grantsResult.value);
+  if (samResult.status === "fulfilled") items.push(...samResult.value);
+
+  // Upsert fresh items into DB in the background so they're available next time
+  if (supabase && items.length > 0) {
+    const rows = items.map((item) => ({
+      id: item.id,
+      source: item.source,
+      title: item.title,
+      url: item.url,
+      published_at: item.publishedAt,
+      summary: item.summary,
+      tags: item.tags,
+    }));
+    supabase
+      .from("feed_items")
+      .upsert(rows, { onConflict: "id" })
+      .then(({ error }) => {
+        if (error) console.warn("[fetchLiveItemsForPreferences] Upsert failed:", error);
+      });
+  }
+
+  return items;
 }
 
 export async function getRecentFeedItemsFromStore(): Promise<FeedItem[]> {

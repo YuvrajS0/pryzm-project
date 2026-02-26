@@ -232,6 +232,94 @@ export async function fetchSamGovOpportunities(
 }
 
 /**
+ * Single targeted query to Grants.gov using user preference keywords.
+ * Used for live per-user fetching on feed load — much lighter than the full sync.
+ */
+export async function fetchGrantsForKeywords(keyword: string, limit: number = 20): Promise<FeedItem[]> {
+  const requestBody = {
+    oppStatuses: "posted|forecasted",
+    sortBy: "openDate|desc",
+    rows: limit,
+    keyword,
+  };
+
+  try {
+    const response = await fetch(GRANTS_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(requestBody),
+    });
+
+    if (!response.ok) {
+      console.warn(`[Grants.gov] Targeted fetch error: ${response.status}`);
+      return [];
+    }
+
+    const data = await response.json();
+    const opportunities = data.oppHits || data.data?.oppHits || [];
+
+    return opportunities.map((opp: GrantsGovOpportunity, index: number) => ({
+      id: opp.id || `grants-${opp.number}-${index}`,
+      source: "grants" as const,
+      title: opp.title,
+      url: `https://www.grants.gov/search-results-detail/${opp.id}`,
+      publishedAt: toISODate(opp.openDate) || new Date().toISOString(),
+      summary: opp.synopsis?.synopsisDesc || `${opp.agency} funding opportunity. CFDA: ${opp.cfdaList.join(", ")}`,
+      tags: ["grant", "funding", opp.agency?.toLowerCase() || "", ...opp.cfdaList.map((cfda: string) => `cfda-${cfda}`)].filter(Boolean),
+      score: 0,
+    }));
+  } catch (error) {
+    console.warn("[Grants.gov] Targeted fetch failed:", error);
+    return [];
+  }
+}
+
+/**
+ * Single targeted query to SAM.gov using user preference keywords.
+ * Used for live per-user fetching on feed load — much lighter than the full sync.
+ */
+export async function fetchSamForKeywords(keyword: string, limit: number = 20): Promise<FeedItem[]> {
+  if (!SAM_API_KEY) return [];
+
+  try {
+    const params = new URLSearchParams({
+      api_key: SAM_API_KEY,
+      limit: limit.toString(),
+      postedFrom: getDateDaysAgo(30),
+      postedTo: getCurrentDate(),
+      qterms: keyword,
+    });
+
+    const response = await fetch(`${SAM_API_URL}?${params.toString()}`, {
+      method: "GET",
+      headers: { "Content-Type": "application/json" },
+    });
+
+    if (!response.ok) {
+      console.warn(`[SAM.gov] Targeted fetch error: ${response.status}`);
+      return [];
+    }
+
+    const data = await response.json();
+    const opportunities = data.opportunitiesData || [];
+
+    return opportunities.map((opp: SamGovOpportunity, index: number) => ({
+      id: opp.noticeId || `sam-${opp.solicitationNumber}-${index}`,
+      source: "contracts" as const,
+      title: opp.title,
+      url: `https://sam.gov/opp/${opp.noticeId}/view`,
+      publishedAt: toISODate(opp.postedDate) || new Date().toISOString(),
+      summary: opp.description?.substring(0, 500) || `Contract opportunity from ${opp.department}`,
+      tags: ["contract", "procurement", opp.department?.toLowerCase() || "", opp.classificationCode?.toLowerCase() || ""].filter(Boolean),
+      score: 0,
+    }));
+  } catch (error) {
+    console.warn("[SAM.gov] Targeted fetch failed:", error);
+    return [];
+  }
+}
+
+/**
  * Parse a date string (MM/DD/YYYY or other formats) into an ISO string.
  * Returns null if parsing fails.
  */
