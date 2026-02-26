@@ -114,8 +114,15 @@ export default function Home() {
   }
 
   const filteredLatestItems = useMemo(() => {
-    if (latestSourceFilter === "all") return latestItems;
-    return latestItems.filter((item) => item.source === latestSourceFilter);
+    const items =
+      latestSourceFilter !== "all"
+        ? latestItems.filter((item) => item.source === latestSourceFilter)
+        : [...latestItems];
+    return items.sort((a, b) => {
+      const aDate = a.publishedAt ? new Date(a.publishedAt).getTime() : 0;
+      const bDate = b.publishedAt ? new Date(b.publishedAt).getTime() : 0;
+      return bDate - aDate;
+    });
   }, [latestItems, latestSourceFilter]);
 
   const displayItems =
