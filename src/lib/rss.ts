@@ -177,10 +177,6 @@ export async function fetchDefenseNewsForTopics(topics: string[]): Promise<FeedI
 
 export type UserScoringContext = {
   preferences?: string[];
-  recentSearches?: string[];
-  mutedTerms?: string[];
-  sourceWeights?: Record<string, number>;
-  relevanceWeight?: number; // 0-100, default 60
 };
 
 export function scoreFeedItemsFromQuery(
@@ -191,66 +187,38 @@ export function scoreFeedItemsFromQuery(
   const q = query.trim().toLowerCase();
   const words = q.split(/\s+/).filter(Boolean);
   const ctx = userContext ?? {};
-  const relevanceWeight = (ctx.relevanceWeight ?? 60) / 100;
 
   const scored = items.map((item) => {
     const text = `${item.title} ${item.summary ?? ""} ${item.tags.join(" ")}`.toLowerCase();
 
-    // Mute penalty — bury items matching muted terms
-    if (ctx.mutedTerms?.some((term) => text.includes(term.toLowerCase()))) {
-      return { ...item, score: -50 };
-    }
-
-    // Text relevance (0-100) - much stronger scoring
+    // Text relevance (0-100)
     let textRelevance = 0;
     if (q) {
-      // Exact phrase match in title is strongest
       if (item.title.toLowerCase().includes(q)) {
         textRelevance = 100;
-      }
-      // Title word matches
-      else if (item.title.toLowerCase().split(/\s+/).some((t) => words.includes(t))) {
+      } else if (item.title.toLowerCase().split(/\s+/).some((t) => words.includes(t))) {
         textRelevance = 80;
-      }
-      // All query words found
-      else if (words.length > 0 && words.every((w) => text.includes(w))) {
+      } else if (words.length > 0 && words.every((w) => text.includes(w))) {
         textRelevance = 70;
-      }
-      // Multiple word matches
-      else {
+      } else {
         const matchCount = words.filter((w) => text.includes(w)).length;
         textRelevance = Math.min((matchCount / Math.max(words.length, 1)) * 50, 50);
       }
     }
 
-    // Preference boost (0-50) - much higher
+    // Preference boost (0-40)
     let preferenceBoost = 0;
     if (ctx.preferences?.length) {
       const prefText = ctx.preferences.join(" ").toLowerCase();
       const prefWords = prefText.split(/\s+/).filter(Boolean);
-      
-      // Strong boost if preferences found in title
       const titleMatches = prefWords.filter((w) =>
         item.title.toLowerCase().includes(w),
       ).length;
       if (titleMatches > 0) {
         preferenceBoost = Math.min(titleMatches * 15, 40);
       } else {
-        // Weaker boost if found elsewhere
         const contentMatches = prefWords.filter((w) => text.includes(w)).length;
         preferenceBoost = Math.min(contentMatches * 3, 20);
-      }
-    }
-
-    // Search history boost (0-15)
-    let searchHistoryBoost = 0;
-    if (ctx.recentSearches?.length) {
-      for (let i = 0; i < Math.min(ctx.recentSearches.length, 3); i++) {
-        const searchTerms = ctx.recentSearches[i].toLowerCase().split(/\s+/);
-        const matches = searchTerms.filter((w) => text.includes(w)).length;
-        if (matches > 0) {
-          searchHistoryBoost = Math.max(searchHistoryBoost, 15 - i * 3);
-        }
       }
     }
 
@@ -264,10 +232,6 @@ export function scoreFeedItemsFromQuery(
       tagsBoost = Math.min(matchingTags * 4, 20);
     }
 
-    // Source affinity boost (0-15)
-    const sourceWeight = ctx.sourceWeights?.[item.source] ?? 1;
-    const sourceAffinityBoost = Math.min((sourceWeight - 1) * 15, 15);
-
     // Recency boost (0-20)
     let recencyBoost = 0;
     if (item.publishedAt) {
@@ -277,12 +241,9 @@ export function scoreFeedItemsFromQuery(
       else if (hoursOld <= 168) recencyBoost = 5;
     }
 
-    // Combine all scores
-    const relevanceScore =
-      textRelevance + preferenceBoost + searchHistoryBoost + tagsBoost + sourceAffinityBoost;
-    const finalScore =
-      relevanceWeight * (relevanceScore / 2) +
-      (1 - relevanceWeight) * (recencyBoost * 5);
+    // Combine: 60% relevance, 40% recency
+    const relevanceScore = textRelevance + preferenceBoost + tagsBoost;
+    const finalScore = 0.6 * (relevanceScore / 2) + 0.4 * (recencyBoost * 5);
 
     return {
       ...item,

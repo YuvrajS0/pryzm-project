@@ -53,53 +53,18 @@ async function loadUserContext(
 ): Promise<UserScoringContext> {
   if (!supabase) return {};
 
-  const [prefsResult, topicsResult, settingsResult] = await Promise.allSettled([
-    supabase
-      .from("user_preferences")
-      .select("topic")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: true }),
-    supabase
-      .from("user_topics")
-      .select("query")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false })
-      .limit(10),
-    supabase
-      .from("user_settings")
-      .select("relevance_weight, muted_terms, source_weights")
-      .eq("user_id", userId)
-      .single(),
-  ]);
+  const prefsResult = await supabase
+    .from("user_preferences")
+    .select("topic")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: true });
 
   const preferences =
-    prefsResult.status === "fulfilled" && prefsResult.value.data
-      ? prefsResult.value.data.map((r: { topic: string }) => r.topic)
+    prefsResult.data
+      ? prefsResult.data.map((r: { topic: string }) => r.topic)
       : [];
 
-  const recentSearches =
-    topicsResult.status === "fulfilled" && topicsResult.value.data
-      ? topicsResult.value.data.map((r: { query: string }) => r.query)
-      : [];
-
-  let relevanceWeight = 60;
-  let mutedTerms: string[] = [];
-  let sourceWeights: Record<string, number> = {};
-
-  if (settingsResult.status === "fulfilled" && settingsResult.value.data) {
-    const s = settingsResult.value.data;
-    relevanceWeight = (s.relevance_weight as number) ?? 60;
-    mutedTerms = (s.muted_terms as string[]) ?? [];
-    sourceWeights = (s.source_weights as Record<string, number>) ?? {};
-  }
-
-  return {
-    preferences,
-    recentSearches,
-    relevanceWeight,
-    mutedTerms,
-    sourceWeights,
-  };
+  return { preferences };
 }
 
 export async function POST(request: Request) {
@@ -110,20 +75,7 @@ export async function POST(request: Request) {
     console.log("[/api/feed] Request: query =", query, "userId =", userId);
 
     if (supabase) {
-      let [storedItems] = await Promise.all([
-        getRecentFeedItemsFromStore(),
-        (async () => {
-          try {
-            await supabase.from("user_topics").insert({
-              query,
-              user_id: userId ?? null,
-              created_at: new Date().toISOString(),
-            });
-          } catch (error) {
-            console.warn("[Supabase] Failed to log user topic", error);
-          }
-        })(),
-      ]);
+      let storedItems = await getRecentFeedItemsFromStore();
 
       console.log("[/api/feed] Stored items from DB:", storedItems.length);
 
