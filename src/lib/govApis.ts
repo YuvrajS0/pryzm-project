@@ -75,8 +75,8 @@ export async function fetchGrantsGovOpportunities(
     },
   ];
 
-  for (const strategy of searchStrategies) {
-    try {
+  const results = await Promise.allSettled(
+    searchStrategies.map(async (strategy) => {
       // Remove empty/undefined values - API doesn't like empty strings
       const requestBody: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(strategy)) {
@@ -85,65 +85,39 @@ export async function fetchGrantsGovOpportunities(
         }
       }
 
-      console.log(`[Grants.gov] Request body:`, JSON.stringify(requestBody, null, 2));
-
       const response = await fetch(GRANTS_API_URL, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(requestBody),
       });
-
-      console.log(`[Grants.gov] Response status: ${response.status}`);
 
       if (!response.ok) {
         const errorText = await response.text();
         console.warn(`[Grants.gov] API error: ${response.status} - ${errorText}`);
-        continue;
+        return [];
       }
 
       const data = await response.json();
-      console.log(`[Grants.gov] Response data structure:`, {
-        errorcode: data.errorcode,
-        msg: data.msg,
-        hitCount: data.data?.hitCount,
-        oppHitsLength: data.oppHits?.length || data.data?.oppHits?.length || 0,
-      });
-
-      // The response structure might be nested under "data"
       const opportunities = data.oppHits || data.data?.oppHits || [];
-      console.log(`[Grants.gov] Found ${opportunities.length} opportunities in this strategy`);
 
-      const items = opportunities.map((opp: GrantsGovOpportunity, index: number) => {
-        const summary =
-          opp.synopsis?.synopsisDesc ||
-          `${opp.agency} funding opportunity. CFDA: ${opp.cfdaList.join(", ")}`;
+      return opportunities.map((opp: GrantsGovOpportunity, index: number) => ({
+        id: opp.id || `grants-${opp.number}-${index}`,
+        source: "grants" as const,
+        title: opp.title,
+        url: `https://www.grants.gov/search-results-detail/${opp.id}`,
+        publishedAt: toISODate(opp.openDate) || new Date().toISOString(),
+        summary: opp.synopsis?.synopsisDesc || `${opp.agency} funding opportunity. CFDA: ${opp.cfdaList.join(", ")}`,
+        tags: ["grant", "funding", opp.agency?.toLowerCase() || "", ...opp.cfdaList.map((cfda: string) => `cfda-${cfda}`)].filter(Boolean),
+        score: 0,
+      }));
+    })
+  );
 
-        return {
-          id: opp.id || `grants-${opp.number}-${index}`,
-          source: "grants" as const,
-          title: opp.title,
-          url: `https://www.grants.gov/search-results-detail/${opp.id}`,
-          publishedAt: toISODate(opp.openDate) || new Date().toISOString(),
-          summary: summary,
-          tags: [
-            "grant",
-            "funding",
-            opp.agency?.toLowerCase() || "",
-            ...opp.cfdaList.map((cfda: string) => `cfda-${cfda}`),
-          ].filter(Boolean),
-          score: 0,
-        };
-      });
-
-      console.log(`[Grants.gov] Mapped ${items.length} items from this strategy`);
-      allItems.push(...items);
-    } catch (error) {
-      console.error("[Grants.gov] Failed to fetch opportunities:", error);
-      if (error instanceof Error) {
-        console.error("[Grants.gov] Error details:", error.message, error.stack);
-      }
+  for (const result of results) {
+    if (result.status === "fulfilled") {
+      allItems.push(...result.value);
+    } else {
+      console.error("[Grants.gov] Failed to fetch opportunities:", result.reason);
     }
   }
 
@@ -156,13 +130,6 @@ export async function fetchGrantsGovOpportunities(
   }
 
   return Array.from(uniqueItems.values());
-}
-
-/**
- * Helper function to add delay between API calls
- */
-function delay(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 /**
@@ -205,15 +172,8 @@ export async function fetchSamGovOpportunities(
     },
   ];
 
-  for (let i = 0; i < searchStrategies.length; i++) {
-    const strategy = searchStrategies[i];
-
-    try {
-      // Add delay between requests to avoid rate limiting (except for first request)
-      if (i > 0) {
-        await delay(1000); // Wait 1 second between requests
-      }
-
+  const results = await Promise.allSettled(
+    searchStrategies.map(async (strategy) => {
       const paramEntries: Record<string, string> = {
         api_key: SAM_API_KEY,
         limit: strategy.limit,
@@ -224,52 +184,39 @@ export async function fetchSamGovOpportunities(
         paramEntries.qterms = strategy.qterms;
       }
       const params = new URLSearchParams(paramEntries);
-
       const url = `${SAM_API_URL}?${params.toString()}`;
 
       const response = await fetch(url, {
         method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
       });
 
       if (!response.ok) {
         console.warn(`[SAM.gov] API error for strategy: ${response.status}`);
-        // If rate limited, wait longer before next request
-        if (response.status === 429) {
-          console.log("[SAM.gov] Rate limited, waiting 2 seconds before next request");
-          await delay(2000);
-        }
-        continue;
+        return [];
       }
 
       const data = await response.json();
       const opportunities = data.opportunitiesData || [];
 
-      const items = opportunities.map((opp: SamGovOpportunity, index: number) => {
-        const summary = opp.description?.substring(0, 500) || `Contract opportunity from ${opp.department}`;
+      return opportunities.map((opp: SamGovOpportunity, index: number) => ({
+        id: opp.noticeId || `sam-${opp.solicitationNumber}-${index}`,
+        source: "contracts" as const,
+        title: opp.title,
+        url: `https://sam.gov/opp/${opp.noticeId}/view`,
+        publishedAt: toISODate(opp.postedDate) || new Date().toISOString(),
+        summary: opp.description?.substring(0, 500) || `Contract opportunity from ${opp.department}`,
+        tags: ["contract", "procurement", opp.department?.toLowerCase() || "", opp.classificationCode?.toLowerCase() || ""].filter(Boolean),
+        score: 0,
+      }));
+    })
+  );
 
-        return {
-          id: opp.noticeId || `sam-${opp.solicitationNumber}-${index}`,
-          source: "contracts" as const,
-          title: opp.title,
-          url: `https://sam.gov/opp/${opp.noticeId}/view`,
-          publishedAt: toISODate(opp.postedDate) || new Date().toISOString(),
-          summary: summary,
-          tags: [
-            "contract",
-            "procurement",
-            opp.department?.toLowerCase() || "",
-            opp.classificationCode?.toLowerCase() || "",
-          ].filter(Boolean),
-          score: 0,
-        };
-      });
-
-      allItems.push(...items);
-    } catch (error) {
-      console.error("[SAM.gov] Failed to fetch opportunities:", error);
+  for (const result of results) {
+    if (result.status === "fulfilled") {
+      allItems.push(...result.value);
+    } else {
+      console.error("[SAM.gov] Failed to fetch opportunities:", result.reason);
     }
   }
 
